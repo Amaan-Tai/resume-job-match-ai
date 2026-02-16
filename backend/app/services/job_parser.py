@@ -1,6 +1,6 @@
 import os
 import json
-from typing import Dict, Optional, List
+from typing import List, Optional, Dict
 from pydantic import BaseModel, ValidationError
 from openai import OpenAI
 
@@ -9,63 +9,61 @@ client = OpenAI(
     base_url="https://api.bytez.com/models/v2/openai/v1"
 )
 
-class ResumeStructured(BaseModel):
-    name: Optional[str]
-    email: Optional[str]
-    phone: Optional[str]
+class JobStructured(BaseModel):
+    role: Optional[str]
+    experience_level: Optional[str]
 
-    skills: Dict
-    experience: List
-    projects: List
-    education: List
+    required_skills: List[str]
+    preferred_skills: List[str]
+
+    responsibilities: List[str]
+    nice_to_have: List[str]
 
 
-def extract_structured_resume(resume_text: str) -> Dict:
+def extract_structured_job(job_text: str) -> Dict:
     if not os.getenv("BYTEZ_API_KEY"):
         raise RuntimeError("BYTEZ_API_KEY not set")
 
     prompt = f"""
-You are an expert resume parser.
+You are an expert job description parser.
 
-Extract structured information from the resume text below.
+Extract structured information from the job description below.
+
+The job description may be written in long paragraphs without bullet points.
 
 Rules:
 - Return ONLY valid JSON
 - Do NOT include explanations
-- Use null if missing
+- Use null if information is missing
+- Normalize skill names (e.g. React-Native → React Native)
 
 Output format:
 {{
-  "name": null,
-  "email": null,
-  "phone": null,
-  "skills": {{
-    "languages": [],
-    "frameworks_tools": [],
-    "other": []
-  }},
-  "experience": [],
-  "projects": [],
-  "education": []
+  "role": null,
+  "experience_level": null,
+  "required_skills": [],
+  "preferred_skills": [],
+  "responsibilities": [],
+  "nice_to_have": []
 }}
 
-Resume:
+Job Description:
 \"\"\"
-{resume_text}
+{job_text}
 \"\"\"
 """
 
     response = client.chat.completions.create(
-        model="Qwen/Qwen2-7B-Instruct",
+        model="Qwen/Qwen2-7B-Instruct",  
         messages=[{"role": "user", "content": prompt}],
         temperature=0,
-        max_tokens=800
+        max_tokens=900
     )
 
     try:
         raw_json = response.choices[0].message.content
         parsed = json.loads(raw_json)
-        validated = ResumeStructured(**parsed)
+        validated = JobStructured(**parsed)
         return validated.model_dump()
 
     except json.JSONDecodeError:
